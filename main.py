@@ -44,7 +44,7 @@ app = Ursina(headless=True)
 
 # HIER kommen deine Imports (Stelle sicher, dass 'track.py' existiert!)
 # from track import ... 
-from track import CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, LoopSegment, ShortStraightSegment, StraightSegment, TrackManager
+from Track import CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, LoopSegment, ShortStraightSegment, StraightSegment, TrackManager
 from track.track_manager import set_rotation
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
