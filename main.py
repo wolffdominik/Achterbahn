@@ -4,13 +4,19 @@ import threading
 import importlib.util
 from pathlib import Path
 
-# --- 1. PFAD-SYSTEM ---
-project_root = Path(__file__).resolve().parent
+# --- 1. PROJEKT-ROOT FINDER ---
+# Da dein Repo einen Unterordner 'Achterbahn' hat, stellen wir sicher, dass wir dort suchen
+current_path = Path(__file__).resolve().parent
+if (current_path / "Achterbahn").exists():
+    project_root = current_path / "Achterbahn"
+else:
+    project_root = current_path
+
 sys.path.insert(0, str(project_root))
+print(f"Projekt-Root: {project_root}")
 
 def safe_import(module_name, file_name):
-    """Sucht gezielt nach deiner Datei im Projektordner, ignoriert System-Libraries."""
-    print(f"Suche nach {file_name}...")
+    """Sucht rekursiv im project_root nach der Datei und lädt sie."""
     for path in project_root.rglob(file_name):
         if any(x in str(path) for x in [".venv", "__pycache__", "site-packages"]):
             continue
@@ -22,7 +28,7 @@ def safe_import(module_name, file_name):
         return module
     return None
 
-# --- 2. MANUELLES LADEN (Vermeidet Namenskonflikte auf Render) ---
+# --- 2. MODULE LADEN ---
 track_mod = safe_import("custom_track", "Track.py")
 ui_mod    = safe_import("custom_ui", "ui.py")
 wagon_mod = safe_import("custom_wagon", "wagon.py")
@@ -32,7 +38,7 @@ cmd_mod   = safe_import("custom_commands", "commands.py")
 from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'window-type none\nload-display none\naudio-library-name null')
 
-# --- 4. KLASSEN-BINDUNG ---
+# --- 4. KLASSEN-BINDUNG (Mappt deine Track.py Klassen auf main.py Variablen) ---
 def get_cls(mod, attr_name):
     if not mod: return None
     for attr in dir(mod):
@@ -77,24 +83,20 @@ if is_render:
 app = Ursina(headless=is_render)
 
 # --- 6. KONSTANTEN & FABRIKEN ---
-TRACK_COLORS = {
-    "grau": color.gray, "blau": color.blue, "rot": color.red,
-    "gelb": color.yellow, "lila": color.violet, "schwarz": color.black,
-}
+TRACK_COLORS = {"grau": color.gray, "blau": color.blue, "rot": color.red, "gelb": color.yellow, "lila": color.violet, "schwarz": color.black}
 COLOR_KEYS = list(TRACK_COLORS.keys())
 
-# Hilfsliste für die UI
 SEGMENT_FACTORIES = [
-    ("Gerade",       lambda c: StraightSegment(c)),
-    ("Gerade kurz",  lambda c: ShortStraightSegment(c)),
-    ("Hügel rauf",   lambda c: HillUpSegment(c)),
-    ("Hügel runter", lambda c: HillDownSegment(c)),
-    ("Kurve 90 R",   lambda c: CurveSegment(90, "right", c)),
-    ("Kurve 45 R",   lambda c: CurveSegment(45, "right", c)),
-    ("Kurve 90 L",   lambda c: CurveSegment(90, "left",  c)),
-    ("Kurve 45 L",   lambda c: CurveSegment(45, "left",  c)),
-    ("Looping",      lambda c: LoopSegment(c)),
-    ("Schraube",     lambda c: CorkscrewSegment(c)),
+    ("Gerade", lambda c: StraightSegment(c) if StraightSegment else None),
+    ("Gerade kurz", lambda c: ShortStraightSegment(c) if ShortStraightSegment else None),
+    ("Hügel rauf", lambda c: HillUpSegment(c) if HillUpSegment else None),
+    ("Hügel runter", lambda c: HillDownSegment(c) if HillDownSegment else None),
+    ("Kurve 90 R", lambda c: CurveSegment(90, "right", c) if CurveSegment else None),
+    ("Kurve 45 R", lambda c: CurveSegment(45, "right", c) if CurveSegment else None),
+    ("Kurve 90 L", lambda c: CurveSegment(90, "left", c) if CurveSegment else None),
+    ("Kurve 45 L", lambda c: CurveSegment(45, "left", c) if CurveSegment else None),
+    ("Looping", lambda c: LoopSegment(c) if LoopSegment else None),
+    ("Schraube", lambda c: CorkscrewSegment(c) if CorkscrewSegment else None),
 ]
 
 # --- 7. GAME LOGIC ---
@@ -106,7 +108,6 @@ class GameState:
         self.running = False
         self._preview = None
         
-        # UI Setup (nur wenn Module geladen wurden)
         if SegmentPalette:
             self.palette = SegmentPalette([n for n, _ in SEGMENT_FACTORIES], self.set_segment_type)
         if ColorPicker:
@@ -137,8 +138,10 @@ class GameState:
         if not self.manager: return
         c = TRACK_COLORS[self.color_key]
         factory = SEGMENT_FACTORIES[self.segment_idx][1]
-        self.manager.add_segment(factory(c))
-        self._refresh_preview(); self._update_hud()
+        seg = factory(c)
+        if seg:
+            self.manager.add_segment(seg)
+            self._refresh_preview(); self._update_hud()
 
     def undo(self):
         if self.manager: self.manager.remove_last()
@@ -149,10 +152,11 @@ class GameState:
         if not StraightSegment: return
         factory = SEGMENT_FACTORIES[self.segment_idx][1]
         c = TRACK_COLORS[self.color_key]
-        preview_seg = factory(color.rgba(c.r, c.g, c.b, 0.35))
-        self._preview = preview_seg.spawn()
-        if self.manager and hasattr(self.manager, 'apply_exit_transformation'):
-            self.manager.apply_exit_transformation(self._preview)
+        seg = factory(c)
+        if seg:
+            self._preview = seg.spawn()
+            if self.manager and hasattr(self.manager, 'apply_exit_transformation'):
+                self.manager.apply_exit_transformation(self._preview)
 
     def _update_hud(self):
         count = len(self.manager.segments) if self.manager else 0
@@ -163,7 +167,6 @@ state = None
 
 def update():
     if state and state.running and state.train:
-        # Falls Controls vorhanden, Speed abfragen, sonst 1
         speed = state.controls.speed if hasattr(state.controls, 'speed') else 1
         state.train.update(speed)
 
@@ -174,14 +177,11 @@ def input(key):
     elif key == "enter": state.controls.toggle()
 
 if __name__ == "__main__":
-    # Licht & Boden
     DirectionalLight().look_at(Vec3(1, -2, 1))
     AmbientLight(color=color.rgba(200, 200, 220, 0.3))
     Entity(model="plane", scale=(1200, 100, 1200), color=color.lime * 0.45)
     Sky()
-    
     state = GameState()
     if not is_render:
         EditorCamera()
-    
     app.run()
