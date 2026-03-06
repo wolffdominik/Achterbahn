@@ -27,6 +27,7 @@ from track.track_manager import set_rotation
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
 
+app = Ursina(headless=True)
 # ---------------------------------------------------------------------------
 # Globale Farb-Konstanten für Schienen
 # ---------------------------------------------------------------------------
