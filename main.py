@@ -34,9 +34,9 @@ from flask import Flask
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
-# --- 3. KLASSEN-ZUWEISUNG (Exakt wie in deiner Track.py definiert!) ---
+# --- 3. KLASSEN-ZUWEISUNG (Exakt abgestimmt auf deine Track.py!) ---
 if track_mod:
-    # Hier nutzen wir die kleingeschriebene Endung 'segment', wie in deiner Datei
+    # WICHTIG: Kleingeschriebene Endungen wie in deiner Track.py (z.B. Straightsegment)
     StraightSegment = track_mod.Straightsegment
     ShortStraightSegment = track_mod.Shortstraightsegment
     CurveSegment = track_mod.Curvesegment
@@ -57,10 +57,11 @@ if wagon_mod:
 
 CommandManager = commands_mod.CommandManager if commands_mod else None
 
-# --- 4. WEB-SERVER ---
+# --- 4. WEB-SERVER FÜR RENDER ---
 web_app = Flask(__name__)
 @web_app.route('/')
-def health_check(): return "Achterbahn-Server läuft!", 200
+def health_check():
+    return "Achterbahn-Server läuft!", 200
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -71,7 +72,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 is_render = 'RENDER' in os.environ
 app = Ursina(headless=is_render, title="Achterbahn Designer")
 
-# --- 6. KONSTANTEN (Jetzt NACHDEN die Klassen existieren!) ---
+# --- 6. KONSTANTEN & FABRIKEN (Erst hier, wenn Klassen geladen sind!) ---
 TRACK_COLORS = {
     "grau": color.gray, "blau": color.blue, "rot": color.red,
     "gelb": color.yellow, "lila": color.violet, "schwarz": color.black,
@@ -107,9 +108,11 @@ class GameState:
         self.color_key = "schwarz"
         self.running = False
         self._preview = None
+        
         self.palette = SegmentPalette([n for n, _ in SEGMENT_FACTORIES], self.set_segment_type)
         self.color_ui = ColorPicker(TRACK_COLORS, self.set_color)
         self.controls = TrackControls(self._on_toggle)
+        
         self._hud = Text(text="", position=(-0.85, -0.38), scale=1.1, parent=camera.ui)
         self.train = Train(self.manager)
         self._update_hud()
@@ -157,6 +160,7 @@ class GameState:
         factory = SEGMENT_FACTORIES[self.segment_idx][1]
         preview_seg = factory(color.rgba(c.r, c.g, c.b, 0.35))
         self._preview = preview_seg.spawn()
+        # Fix: Name in deiner Track.py ist 'apply_exit_transformation'
         if hasattr(self.manager, 'apply_exit_transformation'):
             self.manager.apply_exit_transformation(self._preview)
 
@@ -166,7 +170,8 @@ class GameState:
 # --- 8. EVENTS ---
 state = None
 def update():
-    if state and state.running: state.train.update(state.controls.speed)
+    if state and state.running:
+        state.train.update(state.controls.speed)
 
 def input(key):
     if not state: return
