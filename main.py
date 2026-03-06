@@ -45,12 +45,18 @@ def setup_lighting() -> None:
     sun.look_at(Vec3(1, -2, 1))
     AmbientLight(color=color.rgba(200, 200, 220, 0.3))
 
-# 5. Imports von deinen anderen Dateien
-# Wichtig: Stelle sicher, dass 'Track.py', 'ui.py' und 'wagon.py' existieren
-from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
-                   LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
-from ui import ColorPicker, SegmentPalette, TrackControls
-from wagon import Train
+
+# 5. Imports aus den Unterordnern
+# Wir importieren aus 'Track.py' (Datei) im Ordner 'track' (Ordner)
+from track.Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+                         LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
+from track.track_manager import set_rotation
+
+# Wir importieren aus den Dateien in den jeweiligen Ordnern
+from ui.ui import ColorPicker, SegmentPalette, TrackControls
+from wagon.wagon import Train
+# Falls commands.py direkt im Hauptverzeichnis liegt:
+from commands import CommandManager
 
 SEGMENT_FACTORIES: list[tuple[str, object]] = [
     ("Gerade",       lambda c: StraightSegment(c)),
