@@ -1,41 +1,65 @@
 import sys
 import os
 import threading
+import importlib.util
 from pathlib import Path
 
-# --- 1. ABSOLUTER PFAD-FIX FÜR RENDER ---
+# --- 1. ABSOLUTER PFAD-FIX & MANUELLER IMPORT ---
 current_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(current_dir))
 
-# Unterordner zum Suchpfad hinzufügen
-for subfolder in ["track", "ui", "wagon"]:
-    folder_path = current_dir / subfolder
-    if folder_path.exists():
-        sys.path.insert(0, str(folder_path))
-        print(f"Added to path: {folder_path}")
+def manual_import(name, folder):
+    """Erzwingt das Laden eines Moduls aus einem Unterordner."""
+    path = current_dir / folder / f"{name}.py"
+    if path.exists():
+        spec = importlib.util.spec_from_file_location(name, str(path))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        print(f"Manually loaded {name} from {path}")
+        return module
+    print(f"ERROR: Could not find {path}")
+    return None
 
-# --- 2. PANDA3D HEADLESS CONFIG (Muss ganz oben stehen!) ---
+# Kritische Module laden
+track_mod = manual_import("Track", "track")
+ui_mod = manual_import("ui", "ui")
+wagon_mod = manual_import("wagon", "wagon")
+
+# --- 2. PANDA3D HEADLESS CONFIG ---
 from panda3d.core import loadPrcFileData
-loadPrcFileData('', 'window-type none')
-loadPrcFileData('', 'audio-library-name null')
+loadPrcFileData('', 'window-type none\naudio-library-name null')
 
-# --- 3. IMPORTS ---
+# --- 3. IMPORTS AUS DEN MODULEN ---
+if track_mod:
+    CorkscrewSegment = track_mod.CorkscrewSegment
+    CurveSegment = track_mod.CurveSegment
+    HillDownSegment = track_mod.HillDownSegment
+    HillUpSegment = track_mod.HillUpSegment
+    LoopSegment = track_mod.LoopSegment
+    ShortStraightSegment = track_mod.ShortStraightSegment
+    StraightSegment = track_mod.StraightSegment
+    TrackManager = track_mod.TrackManager
+    
+# Falls track_manager.py eine separate Datei ist:
+try:
+    from track.track_manager import set_rotation
+except ImportError:
+    # Falls es in Track.py steckt:
+    set_rotation = getattr(track_mod, 'set_rotation', None)
+
+if ui_mod:
+    ColorPicker = ui_mod.ColorPicker
+    SegmentPalette = ui_mod.SegmentPalette
+    TrackControls = ui_mod.TrackControls
+
+if wagon_mod:
+    Train = wagon_mod.Train
+
+# Standard-Library & Framework Imports
 from flask import Flask
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
-
-# Versuche Imports der Segmente
-try:
-    from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
-                       LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
-    print("Import of Track successful!")
-except ImportError as e:
-    print(f"Fallback Import for Track: {e}")
-    from track.Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
-                             LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
-
-from ui import ColorPicker, SegmentPalette, TrackControls
-from wagon import Train
 from commands import CommandManager
 
 # --- 4. WEB-SERVER FÜR RENDER (Health Check) ---
@@ -143,48 +167,3 @@ class GameState:
 
     def next_type(self):
         self.segment_idx = (self.segment_idx + 1) % len(SEGMENT_FACTORIES)
-        self.palette.select(self.segment_idx)
-        self._refresh_preview()
-        self._update_hud()
-
-    def next_color(self):
-        idx = COLOR_KEYS.index(self.color_key)
-        self.color_key = COLOR_KEYS[(idx + 1) % len(COLOR_KEYS)]
-        self.color_ui.select(self.color_key)
-        self._refresh_preview()
-        self._update_hud()
-
-    def _refresh_preview(self):
-        if self._preview: destroy(self._preview)
-        c = TRACK_COLORS[self.color_key]
-        factory = SEGMENT_FACTORIES[self.segment_idx][1]
-        preview_seg = factory(color.rgba(c.r, c.g, c.b, 0.35))
-        self._preview = preview_seg.spawn()
-        self.manager.apply_exit_transform(self._preview)
-
-    def _update_hud(self):
-        self._hud.text = f"Teile: {len(self.manager.segments)}\n[RÜCKTASTE] Undo\n[C] Clear\n[ENTER] Start"
-
-# --- 8. EVENTS & MAIN LOOP ---
-state = None
-
-def update():
-    if state and state.running:
-        state.train.update(state.controls.speed)
-
-def input(key):
-    if not state: return
-    if key == "space": state.place()
-    elif key == "backspace": state.undo()
-    elif key == "tab": state.next_type()
-    elif key == "q": state.next_color()
-    elif key == "c": state.clear_track()
-    elif key == "enter": state.controls.toggle()
-
-if __name__ == "__main__":
-    setup_lighting()
-    create_ground()
-    Sky()
-    state = GameState()
-    EditorCamera()
-    app.run()
