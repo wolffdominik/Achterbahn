@@ -1,13 +1,32 @@
+import os
 import sys
 from pathlib import Path
+
+# 1. PFAD-SETUP
+sys.path.insert(0, str(Path(__file__).parent))
+
+# 2. PANDA3D GRAFIK ABSCHALTEN (Muss vor 'from ursina import *' stehen!)
+from panda3d.core import loadPrcFileData
+loadPrcFileData('', 'window-type none')
+loadPrcFileData('', 'audio-library-name null')
+
+# 3. WEITERE IMPORTS
 import threading
-import os
 from flask import Flask
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
-# 1. Pfad-Setup
-sys.path.insert(0, str(Path(__file__).parent))
+# 5. Imports aus den Unterordnern
+# Wir importieren aus 'Track.py' (Datei) im Ordner 'track' (Ordner)
+from track.Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+                         LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
+from track.track_manager import set_rotation
+
+# Wir importieren aus den Dateien in den jeweiligen Ordnern
+from ui.ui import ColorPicker, SegmentPalette, TrackControls
+from wagon.wagon import Train
+# Falls commands.py direkt im Hauptverzeichnis liegt:
+from commands import CommandManager
 
 # 2. Mini-Webserver für Render (Health Check)
 web_app = Flask(__name__)
@@ -46,17 +65,7 @@ def setup_lighting() -> None:
     AmbientLight(color=color.rgba(200, 200, 220, 0.3))
 
 
-# 5. Imports aus den Unterordnern
-# Wir importieren aus 'Track.py' (Datei) im Ordner 'track' (Ordner)
-from track.Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
-                         LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
-from track.track_manager import set_rotation
 
-# Wir importieren aus den Dateien in den jeweiligen Ordnern
-from ui.ui import ColorPicker, SegmentPalette, TrackControls
-from wagon.wagon import Train
-# Falls commands.py direkt im Hauptverzeichnis liegt:
-from commands import CommandManager
 
 SEGMENT_FACTORIES: list[tuple[str, object]] = [
     ("Gerade",       lambda c: StraightSegment(c)),
