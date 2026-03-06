@@ -1,6 +1,26 @@
-import os
+
 import sys
+import os
 from pathlib import Path
+
+# --- PFAD-FIX FÜR RENDER ---
+# Wir holen den absoluten Pfad zum Verzeichnis, in dem main.py liegt
+base_path = Path(__file__).resolve().parent
+sys.path.insert(0, str(base_path))
+
+# Wir fügen die Unterordner explizit zum Suchpfad hinzu
+sys.path.insert(0, str(base_path / "track"))
+sys.path.insert(0, str(base_path / "ui"))
+sys.path.insert(0, str(base_path / "wagon"))
+
+# --- PANDA3D / URSINA HEADLESS CONFIG ---
+from panda3d.core import loadPrcFileData
+loadPrcFileData('', 'window-type none')
+loadPrcFileData('', 'audio-library-name null')
+
+
+
+
 
 # 1. PFAD-SETUP
 sys.path.insert(0, str(Path(__file__).parent))
@@ -17,15 +37,16 @@ from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
 # 5. Imports aus den Unterordnern
-# Wir importieren aus 'Track.py' (Datei) im Ordner 'track' (Ordner)
-# Statt 'from track.Track' schreibst du jetzt direkt:
-from track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+# --- JETZT DIE IMPORTS ---
+# Da wir die Ordner oben zu sys.path hinzugefügt haben, 
+# können wir die Dateien jetzt DIREKT beim Namen nennen:
+from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
                    LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
 from track_manager import set_rotation
-
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
-# Falls commands.py direkt im Hauptverzeichnis liegt:
+
+
 from commands import CommandManager
 
 # 2. Mini-Webserver für Render (Health Check)
