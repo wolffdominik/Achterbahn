@@ -4,6 +4,58 @@ import threading
 import importlib.util
 from pathlib import Path
 
+# --- 1. PFAD-SYSTEM ---
+current_path = Path(__file__).resolve().parent
+project_root = current_path / "Achterbahn" if (current_path / "Achterbahn").exists() else current_path
+sys.path.insert(0, str(project_root))
+
+# --- 2. EXTREMER HEADLESS-FIX (MUSS VOR URSINA KOMMEN) ---
+from panda3d.core import loadPrcFileData
+# Wir sagen Panda3D, dass es gar kein Display-Modul laden soll
+loadPrcFileData('', 'window-type none')
+loadPrcFileData('', 'load-display none') 
+loadPrcFileData('', 'audio-library-name null')
+loadPrcFileData('', 'aux-display none')
+
+# Wir verhindern, dass Ursina versucht, ein Fenster zu erzwingen
+import ursina
+from ursina import application
+is_render = 'RENDER' in os.environ or os.environ.get('PORT') is not None
+if is_render:
+    application.window_type = 'none'
+
+# Jetzt erst die restlichen Ursina-Klassen laden
+from ursina import Ursina, Entity, color, Vec3, Sky, camera, Text, destroy, DirectionalLight, AmbientLight
+from ursina.prefabs.editor_camera import EditorCamera
+from flask import Flask
+
+# --- 3. DEINE IMPORT-LOGIK ---
+def safe_import(module_name, file_name):
+    for path in project_root.rglob(file_name):
+        if any(x in str(path) for x in [".venv", "__pycache__", "site-packages"]):
+            continue
+        spec = importlib.util.spec_from_file_location(module_name, str(path))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    return None
+
+track_mod = safe_import("custom_track", "Track.py")
+ui_mod    = safe_import("custom_ui", "ui.py")
+wagon_mod = safe_import("custom_wagon", "wagon.py")
+cmd_mod   = safe_import("custom_commands", "commands.py")
+
+# ... restlicher Code (get_cls, Flask-Setup etc.) ...
+
+
+import sys
+import os
+import threading
+import importlib.util
+from pathlib import Path
+
+
 # --- 1. PROJEKT-PFADE ---
 # Wir stellen sicher, dass wir im richtigen Verzeichnis suchen (Achterbahn-Unterordner)
 current_path = Path(__file__).resolve().parent
