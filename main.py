@@ -162,26 +162,4 @@ class GameState:
 state = None
 
 def update():
-    if state and state.running and state.train:
-        # Falls Controls vorhanden, Speed abfragen, sonst 1
-        speed = state.controls.speed if hasattr(state.controls, 'speed') else 1
-        state.train.update(speed)
-
-def input(key):
-    if not state: return
-    if key == "space": state.place()
-    elif key == "backspace": state.undo()
-    elif key == "enter": state.controls.toggle()
-
-if __name__ == "__main__":
-    # Licht & Boden
-    DirectionalLight().look_at(Vec3(1, -2, 1))
-    AmbientLight(color=color.rgba(200, 200, 220, 0.3))
-    Entity(model="plane", scale=(1200, 100, 1200), color=color.lime * 0.45)
-    Sky()
-    
-    state = GameState()
-    if not is_render:
-        EditorCamera()
-    
-    app.run()
+    if state and state
