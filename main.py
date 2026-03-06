@@ -4,63 +4,48 @@ import threading
 import importlib.util
 from pathlib import Path
 
-# --- 1. PFAD-REPARATUR (Extrem-Modus) ---
-current_dir = Path(__file__).resolve().parent
-sys.path.insert(0, str(current_dir))
+# --- 1. PFAD-SYSTEM ---
+# Wir suchen NUR im Projektverzeichnis, nicht in den System-Libraries
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
 
-def manual_import(name, folder_hint):
-    """Sucht rekursiv nach der Datei, falls der Pfad nicht direkt stimmt."""
-    # Suche nach Track.py, track.py, Track.py etc.
-    search_names = [f"{name}.py", f"{name.lower()}.py", f"{name.capitalize()}.py"]
-    
-    # 1. Direkter Versuch
-    for fname in search_names:
-        full_path = current_dir / folder_hint / fname
-        if full_path.exists():
-            spec = importlib.util.spec_from_file_location(name, str(full_path))
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            spec.loader.exec_module(module)
-            print(f"ERFOLG: {name} gefunden in {full_path}")
-            return module
-
-    # 2. Notfall: Suche im ganzen Projekt
-    for path in current_dir.rglob("*.py"):
-        if path.name.lower() in [s.lower() for s in search_names]:
-            spec = importlib.util.spec_from_file_location(name, str(path))
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            spec.loader.exec_module(module)
-            print(f"NOTFALL-ERFOLG: {name} gefunden unter {path}")
-            return module
+def safe_import(module_name, file_name):
+    """Sucht gezielt nach deiner Datei im Projektordner."""
+    print(f"Suche nach {file_name}...")
+    for path in project_root.rglob(file_name):
+        if ".venv" in str(path) or "__pycache__" in str(path):
+            continue # Ignoriere virtuelle Umgebungen
             
-    print(f"FEHLER: {name} konnte nirgendwo gefunden werden!")
+        print(f"Gefunden: {path}. Lade...")
+        spec = importlib.util.spec_from_file_location(module_name, str(path))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    print(f"WARNUNG: {file_name} nicht im Projekt gefunden.")
     return None
 
-# Module laden
-track_mod = manual_import("Track", "track")
-ui_mod = manual_import("ui", "ui")
-wagon_mod = manual_import("wagon", "wagon")
-commands_mod = manual_import("commands", "track")
+# --- 2. MANUELLES LADEN DEINER DATEIEN ---
+# WICHTIG: Wir laden 'Track.py', nicht das Paket 'track'
+track_mod = safe_import("custom_track", "Track.py")
+ui_mod    = safe_import("custom_ui", "ui.py")
+wagon_mod = safe_import("custom_wagon", "wagon.py")
+# Wir suchen nach commands.py, nennen das Modul aber anders, um System-Konflikte zu vermeiden
+cmd_mod   = safe_import("custom_commands", "commands.py")
 
-# --- 2. GRAFIK-DEAKTIVIERUNG (Bevor irgendwas von Ursina geladen wird) ---
+# --- 3. PANDA3D GRAFIK-KILLER ---
 from panda3d.core import loadPrcFileData
-# Wir erzwingen 'offscreen' und 'none' auf Systemebene
-loadPrcFileData('', 'window-type none')
-loadPrcFileData('', 'load-display none')
-loadPrcFileData('', 'audio-library-name null')
-loadPrcFileData('', 'aux-display none')
+loadPrcFileData('', 'window-type none\nload-display none\naudio-library-name null')
 
-# --- 3. URSINA & FLASK IMPORTS ---
-from flask import Flask
-import ursina
-from ursina import Ursina, Entity, color, Vec3, DirectionalLight, AmbientLight, Sky, camera, Text, destroy
-from ursina.prefabs.editor_camera import EditorCamera
-
-# --- 4. KLASSEN-ZUORDNUNG ---
-# Wir nutzen getattr, um Abstürze bei fehlenden Modulen zu verhindern
-def get_cls(mod, attr):
-    return getattr(mod, attr, getattr(mod, attr.lower(), getattr(mod, attr.capitalize(), None)))
+# --- 4. KLASSEN-BINDUNG ---
+# Wir ziehen die Klassen aus den 'custom_' Modulen
+def get_cls(mod, attr_name):
+    if not mod: return None
+    # Suche Case-Insensitive (Trackmanager vs TrackManager)
+    for attr in dir(mod):
+        if attr.lower() == attr_name.lower():
+            return getattr(mod, attr)
+    return None
 
 StraightSegment = get_cls(track_mod, 'Straightsegment')
 ShortStraightSegment = get_cls(track_mod, 'Shortstraightsegment')
@@ -75,9 +60,12 @@ ColorPicker = get_cls(ui_mod, 'ColorPicker')
 SegmentPalette = get_cls(ui_mod, 'SegmentPalette')
 TrackControls = get_cls(ui_mod, 'TrackControls')
 Train = get_cls(wagon_mod, 'Train')
-CommandManager = get_cls(commands_mod, 'CommandManager')
 
-# --- 5. WEB-SERVER ---
+# --- 5. URSINA & FLASK ---
+from flask import Flask
+import ursina
+from ursina import Ursina, Entity, color, Vec3, Sky, camera, Text, destroy
+
 web_app = Flask(__name__)
 @web_app.route('/')
 def health_check(): return "Achterbahn-Server läuft!", 200
@@ -88,7 +76,7 @@ def run_web_server():
 
 threading.Thread(target=run_web_server, daemon=True).start()
 
-# --- 6. URSINA START (Sicherheits-Check für Headless) ---
+# --- 6. START ---
 is_render = 'RENDER' in os.environ
 if is_render:
     ursina.application.window_type = 'none'
