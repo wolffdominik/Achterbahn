@@ -19,7 +19,7 @@ from ursina.prefabs.editor_camera import EditorCamera
 # 5. Imports aus den Unterordnern
 # Wir importieren aus 'Track.py' (Datei) im Ordner 'track' (Ordner)
 # Statt 'from track.Track' schreibst du jetzt direkt:
-from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+from track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
                    LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
 from track_manager import set_rotation
 
