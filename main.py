@@ -12,7 +12,7 @@ def safe_import(module_name, file_name):
     """Sucht gezielt nach deiner Datei im Projektordner, ignoriert System-Libraries."""
     print(f"Suche nach {file_name}...")
     for path in project_root.rglob(file_name):
-        if ".venv" in str(path) or "__pycache__" in str(path) or "site-packages" in str(path):
+        if any(x in str(path) for x in [".venv", "__pycache__", "site-packages"]):
             continue
         print(f"Gefunden: {path}. Lade als {module_name}...")
         spec = importlib.util.spec_from_file_location(module_name, str(path))
@@ -22,13 +22,13 @@ def safe_import(module_name, file_name):
         return module
     return None
 
-# --- 2. MANUELLES LADEN (Vermeidet Namenskonflikte) ---
+# --- 2. MANUELLES LADEN (Vermeidet Namenskonflikte auf Render) ---
 track_mod = safe_import("custom_track", "Track.py")
 ui_mod    = safe_import("custom_ui", "ui.py")
 wagon_mod = safe_import("custom_wagon", "wagon.py")
 cmd_mod   = safe_import("custom_commands", "commands.py")
 
-# --- 3. PANDA3D GRAFIK-KILLER ---
+# --- 3. PANDA3D GRAFIK-KILLER (Headless Force) ---
 from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'window-type none\nload-display none\naudio-library-name null')
 
@@ -76,13 +76,14 @@ if is_render:
 
 app = Ursina(headless=is_render)
 
-# --- 6. GAME LOGIC KONFIGURATION ---
+# --- 6. KONSTANTEN & FABRIKEN ---
 TRACK_COLORS = {
     "grau": color.gray, "blau": color.blue, "rot": color.red,
     "gelb": color.yellow, "lila": color.violet, "schwarz": color.black,
 }
 COLOR_KEYS = list(TRACK_COLORS.keys())
 
+# Hilfsliste für die UI
 SEGMENT_FACTORIES = [
     ("Gerade",       lambda c: StraightSegment(c)),
     ("Gerade kurz",  lambda c: ShortStraightSegment(c)),
@@ -96,6 +97,7 @@ SEGMENT_FACTORIES = [
     ("Schraube",     lambda c: CorkscrewSegment(c)),
 ]
 
+# --- 7. GAME LOGIC ---
 class GameState:
     def __init__(self):
         self.manager = TrackManager() if TrackManager else None
@@ -104,7 +106,7 @@ class GameState:
         self.running = False
         self._preview = None
         
-        # UI Setup
+        # UI Setup (nur wenn Module geladen wurden)
         if SegmentPalette:
             self.palette = SegmentPalette([n for n, _ in SEGMENT_FACTORIES], self.set_segment_type)
         if ColorPicker:
@@ -154,22 +156,32 @@ class GameState:
 
     def _update_hud(self):
         count = len(self.manager.segments) if self.manager else 0
-        self._hud.text = f"Teile: {count}\n[ENTER] Start/Stop"
+        self._hud.text = f"Teile: {count}\n[SPACE] Place [ENTER] Start/Stop"
 
-# --- 7. START & EVENTS ---
+# --- 8. START & EVENTS ---
 state = None
 
 def update():
     if state and state.running and state.train:
-        # Falls TrackControls einen Speed-Slider hat
+        # Falls Controls vorhanden, Speed abfragen, sonst 1
         speed = state.controls.speed if hasattr(state.controls, 'speed') else 1
         state.train.update(speed)
 
+def input(key):
+    if not state: return
+    if key == "space": state.place()
+    elif key == "backspace": state.undo()
+    elif key == "enter": state.controls.toggle()
+
 if __name__ == "__main__":
+    # Licht & Boden
     DirectionalLight().look_at(Vec3(1, -2, 1))
     AmbientLight(color=color.rgba(200, 200, 220, 0.3))
+    Entity(model="plane", scale=(1200, 100, 1200), color=color.lime * 0.45)
     Sky()
+    
     state = GameState()
     if not is_render:
         EditorCamera()
+    
     app.run()
