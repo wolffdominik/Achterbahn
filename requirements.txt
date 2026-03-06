@@ -1,1 +1,5 @@
 ursina
+pathlib
+sys
+math
+panda3d.core
