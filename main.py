@@ -21,13 +21,36 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
+import threading
+from flask import Flask
+import os
 
+# 1. Mini-Webserver für Render
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def health_check():
+    return "Achterbahn-Server läuft!", 200
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host='0.0.0.0', port=port)
+
+# Starte den Webserver in einem Hintergrund-Thread
+threading.Thread(target=run_web_server, daemon=True).start()
+
+# 2. Ursina Initialisierung
+app = Ursina(headless=True)
+
+# HIER kommen deine Imports (Stelle sicher, dass 'track.py' existiert!)
+# from track import ... 
 from track import CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, LoopSegment, ShortStraightSegment, StraightSegment, TrackManager
 from track.track_manager import set_rotation
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
 
-app = Ursina(headless=True)
+app.run()
+
 # ---------------------------------------------------------------------------
 # Globale Farb-Konstanten für Schienen
 # ---------------------------------------------------------------------------
