@@ -1,43 +1,44 @@
 import sys
 import os
-from pathlib import Path
 import threading
+from pathlib import Path
 
-# 1. PFAD-FIX (Zuerst!)
-base_path = Path(__file__).resolve().parent
-sys.path.insert(0, str(base_path))
-sys.path.insert(0, str(base_path / "track"))
-sys.path.insert(0, str(base_path / "ui"))
-sys.path.insert(0, str(base_path / "wagon"))
+# --- 1. ABSOLUTER PFAD-FIX FÜR RENDER ---
+current_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(current_dir))
 
-# 2. PANDA3D HEADLESS CONFIG (Muss vor Ursina kommen!)
+# Unterordner zum Suchpfad hinzufügen
+for subfolder in ["track", "ui", "wagon"]:
+    folder_path = current_dir / subfolder
+    if folder_path.exists():
+        sys.path.insert(0, str(folder_path))
+        print(f"Added to path: {folder_path}")
+
+# --- 2. PANDA3D HEADLESS CONFIG (Muss ganz oben stehen!) ---
 from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'window-type none')
 loadPrcFileData('', 'audio-library-name null')
 
-# 3. WEITERE IMPORTS
+# --- 3. IMPORTS ---
 from flask import Flask
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
-# 4. IMPORTS AUS UNTERORDNERN
-# WICHTIG: Der Dateiname im Ordner 'track' ist 'Track.py' (Großes T!)
-from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
-                   LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
+# Versuche Imports der Segmente
+try:
+    from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+                       LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
+    print("Import of Track successful!")
+except ImportError as e:
+    print(f"Fallback Import for Track: {e}")
+    from track.Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
+                             LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
 
-# In Track.py scheint auch set_rotation zu liegen (oder in track_manager.py?)
-# Falls es in track/track_manager.py liegt:
-from track_manager import set_rotation 
-
-# WICHTIG: Dateien in ui/ und wagon/ sind kleingeschrieben
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
-
-
 from commands import CommandManager
 
-
-# 5. WEB-SERVER FÜR RENDER (Health Check)
+# --- 4. WEB-SERVER FÜR RENDER (Health Check) ---
 web_app = Flask(__name__)
 @web_app.route('/')
 def health_check():
@@ -49,11 +50,11 @@ def run_web_server():
 
 threading.Thread(target=run_web_server, daemon=True).start()
 
-# 6. URSINA INITIALISIERUNG
+# --- 5. URSINA INITIALISIERUNG ---
 is_render = 'RENDER' in os.environ
 app = Ursina(headless=is_render, title="Achterbahn Designer")
 
-# 7. KONSTANTEN & SZENEN-LOGIK
+# --- 6. KONSTANTEN & SZENEN-LOGIK ---
 TRACK_COLORS: dict[str, color] = {
     "grau":    color.gray,
     "blau":    color.blue,
@@ -86,7 +87,7 @@ SEGMENT_FACTORIES: list[tuple[str, object]] = [
     ("Schraube",     lambda c: CorkscrewSegment(c)),
 ]
 
-# 8. GAMESTATE KLASSE
+# --- 7. GAMESTATE KLASSE ---
 class GameState:
     def __init__(self) -> None:
         self.manager     = TrackManager()
@@ -164,4 +165,26 @@ class GameState:
     def _update_hud(self):
         self._hud.text = f"Teile: {len(self.manager.segments)}\n[RÜCKTASTE] Undo\n[C] Clear\n[ENTER] Start"
 
-# 9
+# --- 8. EVENTS & MAIN LOOP ---
+state = None
+
+def update():
+    if state and state.running:
+        state.train.update(state.controls.speed)
+
+def input(key):
+    if not state: return
+    if key == "space": state.place()
+    elif key == "backspace": state.undo()
+    elif key == "tab": state.next_type()
+    elif key == "q": state.next_color()
+    elif key == "c": state.clear_track()
+    elif key == "enter": state.controls.toggle()
+
+if __name__ == "__main__":
+    setup_lighting()
+    create_ground()
+    Sky()
+    state = GameState()
+    EditorCamera()
+    app.run()
