@@ -1,101 +1,101 @@
-self.train = Train(self.manager)
-        self._update_hud()
-        self._refresh_preview()
+import sys
+import os
+import threading
+import importlib.util
+from pathlib import Path
 
-    def set_segment_type(self, idx):
-        self.segment_idx = idx
-        self._refresh_preview()
-        self._update_hud()
+# --- 1. PFAD-FIX & INTELLIGENTER IMPORT ---
+current_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(current_dir))
 
-    def set_color(self, key):
-        self.color_key = key
-        self._refresh_preview()
-        self._update_hud()
+def manual_import(name, folder):
+    """Sucht nach Dateien (Groß/Klein) und lädt sie direkt."""
+    # Wir prüfen Track.py, track.py, UI.py, ui.py etc.
+    possible_filenames = [name, name.capitalize(), name.lower()]
+    for filename in possible_filenames:
+        path = current_dir / folder / f"{filename}.py"
+        if path.exists():
+            spec = importlib.util.spec_from_file_location(name, str(path))
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+            print(f"ERFOLG: {filename} aus {folder} geladen.")
+            return module
+    print(f"FEHLER: Modul {name} in /{folder} nicht gefunden!")
+    return None
 
-    def _on_toggle(self, running):
-        self.running = running
-        if running: 
-            self.train.start()
-        else: 
-            self.train.stop()
+# Module laden
+track_mod = manual_import("Track", "track")
+ui_mod = manual_import("ui", "ui")
+wagon_mod = manual_import("wagon", "wagon")
+commands_mod = manual_import("commands", "track")
 
-    def place(self):
-        c = TRACK_COLORS[self.color_key]
-        factory = SEGMENT_FACTORIES[self.segment_idx][1]
-        self.manager.add_segment(factory(c))
-        self._refresh_preview()
-        self._update_hud()
+# --- 2. PANDA3D / URSINA HEADLESS FORCE (Muss vor Ursina kommen!) ---
+from panda3d.core import loadPrcFileData
+loadPrcFileData('', 'window-type none')
+loadPrcFileData('', 'load-display none')
+loadPrcFileData('', 'audio-library-name null')
 
-    def undo(self):
-        self.manager.remove_last()
-        self._refresh_preview()
-        self._update_hud()
+from flask import Flask
+from ursina import *
+from ursina.prefabs.editor_camera import EditorCamera
 
-    def clear_track(self):
-        self.train.stop()
-        self.running = False
-        self.controls.toggle() # Setzt den Button UI zurück
-        self.manager.clear()
-        self._refresh_preview()
-        self._update_hud()
+# --- 3. KLASSEN-ZUWEISUNG ---
+if track_mod:
+    StraightSegment = getattr(track_mod, 'Straightsegment', getattr(track_mod, 'StraightSegment', None))
+    ShortStraightSegment = getattr(track_mod, 'Shortstraightsegment', getattr(track_mod, 'ShortStraightSegment', None))
+    CurveSegment = getattr(track_mod, 'Curvesegment', getattr(track_mod, 'CurveSegment', None))
+    HillUpSegment = getattr(track_mod, 'Hillupsegment', getattr(track_mod, 'HillUpSegment', None))
+    HillDownSegment = getattr(track_mod, 'Hilldownsegment', getattr(track_mod, 'HillDownSegment', None))
+    LoopSegment = getattr(track_mod, 'Loopsegment', getattr(track_mod, 'LoopSegment', None))
+    CorkscrewSegment = getattr(track_mod, 'Corkscrewsegment', getattr(track_mod, 'CorkscrewSegment', None))
+    TrackManager = getattr(track_mod, 'Trackmanager', getattr(track_mod, 'TrackManager', None))
 
-    def next_type(self):
-        self.segment_idx = (self.segment_idx + 1) % len(SEGMENT_FACTORIES)
-        self.palette.select(self.segment_idx)
-        self._refresh_preview()
-        self._update_hud()
+if ui_mod:
+    ColorPicker = getattr(ui_mod, 'ColorPicker', None)
+    SegmentPalette = getattr(ui_mod, 'SegmentPalette', None)
+    TrackControls = getattr(ui_mod, 'TrackControls', None)
 
-    def next_color(self):
-        idx = COLOR_KEYS.index(self.color_key)
-        self.color_key = COLOR_KEYS[(idx + 1) % len(COLOR_KEYS)]
-        self.color_ui.select(self.color_key)
-        self._refresh_preview()
-        self._update_hud()
+if wagon_mod:
+    Train = getattr(wagon_mod, 'Train', None)
 
-    def _refresh_preview(self):
-        if self._preview: 
-            destroy(self._preview)
-        c = TRACK_COLORS[self.color_key]
-        factory = SEGMENT_FACTORIES[self.segment_idx][1]
-        # Erzeugt eine halbtransparente Vorschau
-        preview_seg = factory(color.rgba(c.r, c.g, c.b, 0.35))
-        self._preview = preview_seg.spawn()
-        # Nutzt die Transformation aus deiner Trackmanager-Klasse
-        if hasattr(self.manager, 'apply_exit_transformation'):
-            self.manager.apply_exit_transformation(self._preview)
+CommandManager = getattr(commands_mod, 'CommandManager', None) if commands_mod else None
 
-    def _update_hud(self):
-        self._hud.text = f"Teile: {len(self.manager.segments)}\n[RÜCKTASTE] Undo\n[C] Clear\n[ENTER] Start"
+# --- 4. WEB-SERVER FÜR RENDER ---
+web_app = Flask(__name__)
+@web_app.route('/')
+def health_check():
+    return "Achterbahn-Server läuft!", 200
 
-# --- 8. GLOBAL EVENTS & CALLBACKS ---
-state = None
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host='0.0.0.0', port=port)
 
-def update():
-    if state and state.running:
-        # Bewegt den Zug basierend auf dem Speed-Slider in den Controls
-        state.train.update(state.controls.speed)
+threading.Thread(target=run_web_server, daemon=True).start()
 
-def input(key):
-    if not state: 
-        return
-    if key == "space": 
-        state.place()
-    elif key == "backspace": 
-        state.undo()
-    elif key == "tab": 
-        state.next_type()
-    elif key == "q": 
-        state.next_color()
-    elif key == "c": 
-        state.clear_track()
-    elif key == "enter": 
-        state.controls.toggle()
+# --- 5. INITIALISIERUNG ---
+is_render = 'RENDER' in os.environ or os.environ.get('PORT') is not None
+if is_render:
+    from ursina import application
+    application.window_type = 'none'
 
-# --- 9. STARTPUNKT ---
-if __name__ == "__main__":
-    setup_lighting()
-    create_ground()
-    Sky()
-    state = GameState()
-    EditorCamera() # Erlaubt freies Bewegen der Kamera
-    app.run()
+app = Ursina(headless=is_render)
+
+# --- 6. KONSTANTEN & FABRIKEN ---
+TRACK_COLORS = {
+    "grau": color.gray, "blau": color.blue, "rot": color.red,
+    "gelb": color.yellow, "lila": color.violet, "schwarz": color.black,
+}
+COLOR_KEYS = list(TRACK_COLORS.keys())
+
+SEGMENT_FACTORIES = [
+    ("Gerade",       lambda c: StraightSegment(c)),
+    ("Gerade kurz",  lambda c: ShortStraightSegment(c)),
+    ("Hügel rauf",   lambda c: HillUpSegment(c)),
+    ("Hügel runter", lambda c: HillDownSegment(c)),
+    ("Kurve 90 R",   lambda c: CurveSegment(90, "right", c)),
+    ("Kurve 45 R",   lambda c: CurveSegment(45, "right", c)),
+    ("Kurve 90 L",   lambda c: CurveSegment(90, "left",  c)),
+    ("Kurve 45 L",   lambda c: CurveSegment(45, "left",  c)),
+    ("Looping",      lambda c: LoopSegment(c)),
+    ("Schraube",     lambda c: CorkscrewSegment(c
