@@ -1,55 +1,35 @@
-
 import sys
 import os
 from pathlib import Path
+import threading
 
-# --- PFAD-FIX FÜR RENDER ---
-# Wir holen den absoluten Pfad zum Verzeichnis, in dem main.py liegt
+# 1. PFAD-FIX (Zuerst!)
 base_path = Path(__file__).resolve().parent
 sys.path.insert(0, str(base_path))
-
-# Wir fügen die Unterordner explizit zum Suchpfad hinzu
 sys.path.insert(0, str(base_path / "track"))
 sys.path.insert(0, str(base_path / "ui"))
 sys.path.insert(0, str(base_path / "wagon"))
 
-# --- PANDA3D / URSINA HEADLESS CONFIG ---
-from panda3d.core import loadPrcFileData
-loadPrcFileData('', 'window-type none')
-loadPrcFileData('', 'audio-library-name null')
-
-
-
-
-
-# 1. PFAD-SETUP
-sys.path.insert(0, str(Path(__file__).parent))
-
-# 2. PANDA3D GRAFIK ABSCHALTEN (Muss vor 'from ursina import *' stehen!)
+# 2. PANDA3D HEADLESS CONFIG (Muss vor Ursina kommen!)
 from panda3d.core import loadPrcFileData
 loadPrcFileData('', 'window-type none')
 loadPrcFileData('', 'audio-library-name null')
 
 # 3. WEITERE IMPORTS
-import threading
 from flask import Flask
 from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
-# 5. Imports aus den Unterordnern
-# --- JETZT DIE IMPORTS ---
-# Da wir die Ordner oben zu sys.path hinzugefügt haben, 
-# können wir die Dateien jetzt DIREKT beim Namen nennen:
+# 4. IMPORTS AUS UNTERORDNERN
+# Dank sys.path.insert oben können wir sie direkt ansprechen
 from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
                    LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
 from track_manager import set_rotation
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
-
-
 from commands import CommandManager
 
-# 2. Mini-Webserver für Render (Health Check)
+# 5. WEB-SERVER FÜR RENDER (Health Check)
 web_app = Flask(__name__)
 @web_app.route('/')
 def health_check():
@@ -61,11 +41,11 @@ def run_web_server():
 
 threading.Thread(target=run_web_server, daemon=True).start()
 
-# 3. Ursina Initialisierung (Headless auf Render)
+# 6. URSINA INITIALISIERUNG
 is_render = 'RENDER' in os.environ
 app = Ursina(headless=is_render, title="Achterbahn Designer")
 
-# 4. Globale Konstanten und Funktionen (Müssen VOR GameState definiert sein)
+# 7. KONSTANTEN & SZENEN-LOGIK
 TRACK_COLORS: dict[str, color] = {
     "grau":    color.gray,
     "blau":    color.blue,
@@ -85,9 +65,6 @@ def setup_lighting() -> None:
     sun.look_at(Vec3(1, -2, 1))
     AmbientLight(color=color.rgba(200, 200, 220, 0.3))
 
-
-
-
 SEGMENT_FACTORIES: list[tuple[str, object]] = [
     ("Gerade",       lambda c: StraightSegment(c)),
     ("Gerade kurz",  lambda c: ShortStraightSegment(c)),
@@ -101,7 +78,7 @@ SEGMENT_FACTORIES: list[tuple[str, object]] = [
     ("Schraube",     lambda c: CorkscrewSegment(c)),
 ]
 
-# 6. Spielzustand Klasse
+# 8. GAMESTATE KLASSE
 class GameState:
     def __init__(self) -> None:
         self.manager     = TrackManager()
@@ -179,27 +156,4 @@ class GameState:
     def _update_hud(self):
         self._hud.text = f"Teile: {len(self.manager.segments)}\n[RÜCKTASTE] Undo\n[C] Clear\n[ENTER] Start"
 
-# 7. Ursina Events
-state = None
-
-def update():
-    if state and state.running:
-        state.train.update(state.controls.speed)
-
-def input(key):
-    if not state: return
-    if key == "space": state.place()
-    elif key == "backspace": state.undo()
-    elif key == "tab": state.next_type()
-    elif key == "q": state.next_color()
-    elif key == "c": state.clear_track()
-    elif key == "enter": state.controls.toggle()
-
-# 8. Main Entry Point
-if __name__ == "__main__":
-    setup_lighting()
-    create_ground()
-    Sky()
-    state = GameState()
-    EditorCamera()
-    app.run()
+# 9
