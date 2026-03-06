@@ -21,13 +21,21 @@ from ursina import *
 from ursina.prefabs.editor_camera import EditorCamera
 
 # 4. IMPORTS AUS UNTERORDNERN
-# Dank sys.path.insert oben können wir sie direkt ansprechen
+# WICHTIG: Der Dateiname im Ordner 'track' ist 'Track.py' (Großes T!)
 from Track import (CorkscrewSegment, CurveSegment, HillDownSegment, HillUpSegment, 
                    LoopSegment, ShortStraightSegment, StraightSegment, TrackManager)
-from track_manager import set_rotation
+
+# In Track.py scheint auch set_rotation zu liegen (oder in track_manager.py?)
+# Falls es in track/track_manager.py liegt:
+from track_manager import set_rotation 
+
+# WICHTIG: Dateien in ui/ und wagon/ sind kleingeschrieben
 from ui import ColorPicker, SegmentPalette, TrackControls
 from wagon import Train
+
+
 from commands import CommandManager
+
 
 # 5. WEB-SERVER FÜR RENDER (Health Check)
 web_app = Flask(__name__)
